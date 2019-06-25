@@ -1,0 +1,106 @@
+---
+title: "Weather Data"
+author: "Eric Breton"
+date: "June 2nd, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r Establish Libraries}
+install.packages("rwunderground")
+library(rwunderground)
+library(dplyr)          #for data manipulation
+library(ggplot2)        #for visualisations
+library(lubridate)  
+library(sqldf)
+#to work with dates
+
+
+```
+
+```{r Set Variables for API and Station}
+#Ironically since being purchased by the weather channel much of weather underground's free functions have been disabled. Following that purchase IBM bought the Weather Channel further limiting free functions. Ironically at my orientation at IBM, the guy I was paired with was getting set to start at the Weather Channel, he was able to provide me an old api key which got me access, it is not being shown. The code here is more to provide the process for which it was collected.
+set_api_key("######")
+my_weather_station<-("KDEN")
+```
+
+
+```{r Create For Loop To get Dates}
+dates_to_collect=c(
+"20120305",	"20120314",
+"20120315",	"20120324",
+"20120325",	"20120403",
+"20120404",	"20120413",
+"20120414",	"20120423",
+"20120424",	"20120503",
+"20120504",	"20120513",
+"20120514",	"20120523",
+"20120524",	"20120602",
+"20120603",	"20120612",
+"20120613",	"20120622",
+"20120623",	"20120702",
+"20120703",	"20120712",
+"20120713",	"20120722",
+"20120723",	"20120801",
+"20120802",	"20120811",
+"20120812",	"20120821",
+"20120822",	"20120831",
+"20120901",	"20120910",
+"20120911",	"20120920")
+```
+
+
+```{r runn loop}
+weatherdata_list<-list()
+i=1 #will help us select the ranges
+
+for (k in 1:838) {
+  date_start<-dates_to_collect[i]
+  date_end<-dates_to_collect[i+1]
+
+  weatherdata_list[[k]]<-history_range(set_location(PWS_id = my_weather_station),
+                           date_start = date_start, date_end = date_end)
+  i=i+2 #to get the next range
+}
+
+````
+
+```{r  Clean Data}
+#Atmospheric_data<-dplyr::bind_rows(weatherdata_list)
+
+ad<-Weather_data
+#View(ad)
+#ad<-Atmospheric_Data
+ad<-ad%>%select(dt_iso,temp,pressure,humidity,wind_speed,wind_deg,clouds_all,weather_description)
+#isolate my dat for join to baseball data
+ad<- ad%>% mutate(Date=(substr(dt_iso,0,10)))
+ad<- ad%>% mutate(temp=(temp*(9/5)-459.67))
+#isolate my time in order to make day night distinction
+
+ad<- ad%>% mutate(Time=(as.character(substr(dt_iso,12,19))))
+#remove old date column
+ad<-ad%>%select(-dt_iso)
+#head(ad)
+
+#install.packages("sqldf")
+#library(sqldf) 
+#only pull rows for my day and night time
+ad<-sqldf('Select * from ad where Time in("02:00:00","20:00:00")')
+#create case statement for my day night distinction
+ad<-sqldf('Select
+Date,temp,pressure,humidity,wind_speed,pressure,wind_deg,clouds_all,weather_description,
+case when Time ="20:00:00"
+  then "D" else "N" end as "Day_Night"
+          from ad')
+#As I later found out some of my weather data contained duplicate rows which created problems down the road for me.
+new<-sqldf('select distinct(Date),count(Date) from ad group by Date having count(date)>2')
+#View(new)
+
+write.csv(new, "C:/Users/ebret/Desktop/Practicum/weather_Data_reduced.csv")
+
+````
